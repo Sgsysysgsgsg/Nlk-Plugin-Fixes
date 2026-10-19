@@ -4,56 +4,39 @@
 - Paper: 26.3-205
 - Java: 25
 - Plugins: AxyronAC 2.0.0 and Nemesis 2.1.2
-- Standalone PacketEvents: 2.14.0 (reported by server)
+- Standalone PacketEvents: 2.14.0
 
-## AxyronAC — verified artifact inspection
+## Nemesis — bytecode patch prepared
 
-The original AxyronAC JAR reports PacketEvents **2.12.2** in both:
-- `META-INF/packetevents_spigot_version.txt`
-- `META-INF/packetevents_api_version.txt`
+The prior candidate called `CraftBlockData.fromData(BlockState)`, which fails with `NoSuchMethodError` on the target runtime. Current Paper source exposes `CraftBlockData.createData(BlockState)` instead. A new experimental JAR now changes that method reference in all three bundled NMS manager classes (`v1_21_R3`, `v1_21_R6`, and `v1_21_R11`).
 
-Its PacketEvents classes are shaded under `ac/axyron/axyronac/shaded/com/github/retrooper/packetevents/`.
-
-The supplied candidate `AxyronAC-2.0.0-26.3-PE214-entity-registry-fix-TEST.jar` still reports embedded PacketEvents **2.12.2**. Its `assets/mappings/registries/entity_type.nbt` is 7,923 bytes, the same size as the standalone PacketEvents 2.14.0 resource; this shows a resource-level substitution was attempted, but the embedded implementation remains 2.12.2. This candidate's startup log still fails with:
+Bytecode inspection with `javap` confirms those three call sites now reference:
 
 ```text
-Failed to read StaticComponentType[minecraft:attribute_modifiers]
-Can't find mapped entity with id 38
+CraftBlockData.createData(BlockState): CraftBlockData
 ```
 
-Therefore, swapping one mapping resource is not a verified fix. The next investigation should compare all required mappings and the shaded parser implementation against a compatible PacketEvents release, with careful relocation and dependency checks.
+This confirms the class-file patch was applied. It has **not** yet been run on Paper 26.3, so startup and gameplay remain unverified.
 
-## Nemesis — verified bytecode inspection
+## AxyronAC — PacketEvents refresh candidate prepared
 
-The supplied `Nemesis-2.1.2-26.3-path-fix.jar` contains:
-`net/luxcube/minecraft/nms/v1_21_R11/NMSManagerImpl.class`
+The original plugin embeds PacketEvents 2.12.2. A new experimental candidate replaces its shaded PacketEvents classes with the 2.14.0 classes, relocates package references to AxyronAC's shaded namespace, and replaces the PacketEvents mapping resources.
 
-Its bytecode calls:
+Archive validation confirms:
+- 1,657 PacketEvents classes copied/relocated
+- 130 mapping resources replaced
+- embedded version marker is 2.14.0
+- no duplicate ZIP entry names
+- relocated `PacketEvents.class` can be read by `javap`
 
-```text
-org/bukkit/craftbukkit/block/data/CraftBlockData.fromData(
-  net/minecraft/world/level/block/state/BlockState
-): org/bukkit/craftbukkit/block/data/CraftBlockData
-```
+This is **structural validation only**. AxyronAC may rely on APIs or behavior changed between PacketEvents 2.12.2 and 2.14.0, so this candidate must be tested before use.
 
-The startup log reports:
-```text
-Using nms mapping with mismatched minor versions: 1.21.5 - 26.3.0
-NoSuchMethodError: CraftBlockData.fromData(BlockState)
-```
+## Safe test checklist
 
-This confirms the candidate still contains the old method call. The Paperclip server JAR includes a patched server payload, while the embedded Paper API JAR does not contain the internal CraftBlockData implementation. A correct fix requires obtaining/deriving the actual runtime signature from the remapped 26.3 server and then patching or rebuilding the NMS implementation. Changing version strings alone is not sufficient.
+1. Back up the server and keep original JARs.
+2. Test one candidate at a time on a separate Paper 26.3-205 server running Java 25.
+3. For Nemesis, confirm the NMS manager constructs and the previous `NoSuchMethodError` is gone.
+4. For AxyronAC, confirm component bootstrap succeeds and there are no linkage or mapping errors.
+5. Test actual plugin features, then review the complete startup log.
 
-## Test matrix
-
-| Check | Required result |
-|---|---|
-| Server boot | Paper reaches ready state without either plugin initialization exception |
-| AxyronAC enable | Embedded PacketEvents component bootstrap succeeds |
-| Nemesis enable | NMS manager constructs without NoSuchMethodError |
-| Gameplay smoke test | Core features of each plugin work on the private test server |
-| Regression | No new linkage, mapping, or registry errors in full logs |
-
-## Current result
-
-No patched plugin JAR has been verified. Keep candidate changes experimental until the full test matrix passes.
+Do not install experimental candidates on production. No runtime-success claim is made yet.
