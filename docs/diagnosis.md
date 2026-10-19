@@ -6,28 +6,43 @@
 - Plugins: AxyronAC 2.0.0 and Nemesis 2.1.2
 - Standalone PacketEvents: 2.14.0 (reported by server)
 
-## AxyronAC
-Observed failure in PacketEvents shaded within the plugin:
+## AxyronAC — verified artifact inspection
+
+The original AxyronAC JAR reports PacketEvents **2.12.2** in both:
+- `META-INF/packetevents_spigot_version.txt`
+- `META-INF/packetevents_api_version.txt`
+
+Its PacketEvents classes are shaded under `ac/axyron/axyronac/shaded/com/github/retrooper/packetevents/`.
+
+The supplied candidate `AxyronAC-2.0.0-26.3-PE214-entity-registry-fix-TEST.jar` still reports embedded PacketEvents **2.12.2**. Its `assets/mappings/registries/entity_type.nbt` is 7,923 bytes, the same size as the standalone PacketEvents 2.14.0 resource; this shows a resource-level substitution was attempted, but the embedded implementation remains 2.12.2. This candidate's startup log still fails with:
+
 ```text
 Failed to read StaticComponentType[minecraft:attribute_modifiers]
 Can't find mapped entity with id 38
 ```
 
-Likely area to investigate: mapping/registry data used by the shaded PacketEvents build when reading item component data for the newer protocol. This is a diagnosis, not a confirmed fix. Identify the embedded PacketEvents version and compare against compatible source/resources; do not assume replacing one registry resource fixes everything.
+Therefore, swapping one mapping resource is not a verified fix. The next investigation should compare all required mappings and the shaded parser implementation against a compatible PacketEvents release, with careful relocation and dependency checks.
 
-## Nemesis
-Observed:
+## Nemesis — verified bytecode inspection
+
+The supplied `Nemesis-2.1.2-26.3-path-fix.jar` contains:
+`net/luxcube/minecraft/nms/v1_21_R11/NMSManagerImpl.class`
+
+Its bytecode calls:
+
+```text
+org/bukkit/craftbukkit/block/data/CraftBlockData.fromData(
+  net/minecraft/world/level/block/state/BlockState
+): org/bukkit/craftbukkit/block/data/CraftBlockData
+```
+
+The startup log reports:
 ```text
 Using nms mapping with mismatched minor versions: 1.21.5 - 26.3.0
 NoSuchMethodError: CraftBlockData.fromData(BlockState)
 ```
 
-Origin class:
-```text
-net.luxcube.minecraft.nms.v1_21_R11.NMSManagerImpl
-```
-
-This is a method linkage failure. A correct repair must verify the runtime method descriptor and patch/rebuild the NMS implementation against the correct API. Changing a version label alone is not enough.
+This confirms the candidate still contains the old method call. The Paperclip server JAR includes a patched server payload, while the embedded Paper API JAR does not contain the internal CraftBlockData implementation. A correct fix requires obtaining/deriving the actual runtime signature from the remapped 26.3 server and then patching or rebuilding the NMS implementation. Changing version strings alone is not sufficient.
 
 ## Test matrix
 

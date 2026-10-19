@@ -2,30 +2,20 @@
 
 Compatibility investigation for AxyronAC 2.0.0 and Nemesis 2.1.2 on Paper 26.3-205 with Java 25.
 
-> **Status:** Diagnosis and test documentation only. No patched plugin JAR has been produced or verified.
+> **Status:** Investigation and diagnosis only. No patched plugin JAR has been verified.
 
-## Findings from the supplied startup log
+## Findings
 
-### AxyronAC
+- AxyronAC embeds PacketEvents **2.12.2**, despite standalone PacketEvents 2.14.0 being installed. The recent candidate still embeds 2.12.2 and still fails reading `minecraft:attribute_modifiers` because it cannot find mapped entity ID 38.
+- Nemesis's `v1_21_R11/NMSManagerImpl` still calls the old `CraftBlockData.fromData(BlockState)` method, matching the observed `NoSuchMethodError` on Paper 26.3.
 
-A PacketEvents copy shaded inside AxyronAC fails while parsing newer item component data:
+Detailed evidence and the test matrix are in [docs/diagnosis.md](docs/diagnosis.md).
 
-- `Failed to read StaticComponentType[minecraft:attribute_modifiers]`
-- `Can't find mapped entity with id 38`
+## Safe test process
 
-The separately installed PacketEvents 2.14.0 loading successfully does not automatically replace the copy embedded in AxyronAC.
-
-### Nemesis
-
-The log reports an NMS mapping mismatch (`1.21.5 - 26.3.0`) and `NoSuchMethodError: CraftBlockData.fromData(BlockState)` in `net.luxcube.minecraft.nms.v1_21_R11.NMSManagerImpl`.
-
-This is a binary/API mismatch. Changing a version string alone is not a verified repair.
-
-## Test requirements
-
-1. Preserve original plugin JARs and back up the server.
-2. Test candidate builds only on a separate test server.
-3. Confirm both initialization exceptions disappear from full logs.
-4. Verify core plugin functionality and inspect logs for regressions.
+1. Keep untouched copies of the original JARs and a full server backup.
+2. Test candidates only on a separate test server.
+3. Confirm both initialization errors disappear from full logs.
+4. Verify core features and inspect for regressions.
 
 Do not install experimental candidates on production. Do not publish proprietary plugin binaries unless redistribution rights are clear.
