@@ -80,6 +80,7 @@ def main():
         raise SystemExit("No target method references found; output should not be treated as patched.")
     with zipfile.ZipFile(args.output_jar, "w", zipfile.ZIP_DEFLATED) as dst:
         for info, content in entries:
+            info.filename = normalize(info.filename)
             dst.writestr(info, content)
     print("Patched constant-pool method names:")
     for name, count in patched:
