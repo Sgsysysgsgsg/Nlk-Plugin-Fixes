@@ -10,6 +10,10 @@ import zipfile
 
 TARGET_SUFFIX = "/NMSManagerImpl.class"
 TARGET_PREFIX = "net/luxcube/minecraft/nms/"
+VERSIONS = ("v1_21_R3", "v1_21_R6", "v1_21_R11")
+
+def normalize(name):
+    return name.replace("\\", "/")
 OLD = b"fromData"
 NEW = b"createData"
 
@@ -57,16 +61,27 @@ def main():
     parser.add_argument("output_jar")
     args = parser.parse_args()
     patched = []
-    with zipfile.ZipFile(args.input_jar) as src, zipfile.ZipFile(args.output_jar, "w", zipfile.ZIP_DEFLATED) as dst:
+    targets = {f"net/luxcube/minecraft/nms/{version}/NMSManagerImpl.class" for version in VERSIONS}
+    with zipfile.ZipFile(args.input_jar) as src:
+        normalized = {normalize(n): n for n in src.namelist()}
+        found = targets.intersection(normalized)
+        if not found:
+            raise SystemExit("No NMSManagerImpl targets found; input JAR paths/layout are unexpected.")
+        entries = []
         for info in src.infolist():
             content = src.read(info.filename)
-            if info.filename.startswith(TARGET_PREFIX) and info.filename.endswith(TARGET_SUFFIX):
+            if normalize(info.filename) in found:
                 content, count = patch_class(content)
-                if count:
-                    patched.append((info.filename, count))
-            dst.writestr(info, content)
+                if count < 1:
+                    raise SystemExit(f"No fromData UTF8 constant found in {info.filename}; refusing to write output.")
+                patched.append((info.filename, count))
+            entries.append((info, content))
     if not patched:
         raise SystemExit("No target method references found; output should not be treated as patched.")
+    with zipfile.ZipFile(args.output_jar, "w", zipfile.ZIP_DEFLATED) as dst:
+        for info, content in entries:
+            info.filename = normalize(info.filename)
+            dst.writestr(info, content)
     print("Patched constant-pool method names:")
     for name, count in patched:
         print(f"  {name}: {count}")
