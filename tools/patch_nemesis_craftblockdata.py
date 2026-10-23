@@ -13,7 +13,7 @@ TARGET_PREFIX = "net/luxcube/minecraft/nms/"
 VERSIONS = ("v1_21_R3", "v1_21_R6", "v1_21_R11")
 
 def normalize(name):
-    return name.replace("\\\\", "/")
+    return name.replace("\\", "/")
 OLD = b"fromData"
 NEW = b"createData"
 
